@@ -190,7 +190,7 @@ namespace Drowhunter.TelemetryLib
                 {
                     return 1;
                 }
-                catch(Exception x)
+                catch(Exception)
                 {
                     throw;
                 }

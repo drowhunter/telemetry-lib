@@ -135,7 +135,7 @@ namespace Drowhunter.TelemetryLib
                 return client;
 
             }
-            catch(OperationCanceledException ocx)
+            catch(OperationCanceledException)
             {
                 Log("TCP Listener operation was canceled."); 
             }
@@ -163,7 +163,7 @@ namespace Drowhunter.TelemetryLib
             return typeof(T).IsValueType && !typeof(T).IsPrimitive && !typeof(T).IsEnum;
         }
 
-        public bool IsValueType<T>()
+        public new bool IsValueType<T>()
         {
             return typeof(T).IsValueType && typeof(T) != typeof(string) && !typeof(T).IsEnum;
         }
