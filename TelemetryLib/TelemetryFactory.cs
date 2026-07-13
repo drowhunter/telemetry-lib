@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Drowhunter.TelemetryLib
+namespace com.drowhunter.TelemetryLib
 {
     public interface IMmfTelemetryFactory
     {

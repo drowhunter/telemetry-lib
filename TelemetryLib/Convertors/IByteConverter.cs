@@ -1,4 +1,4 @@
-﻿namespace Drowhunter.TelemetryLib
+﻿namespace com.drowhunter.TelemetryLib
 {
     public interface IByteConverter<T>// where T : struct
     {

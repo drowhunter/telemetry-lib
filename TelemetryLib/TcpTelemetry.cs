@@ -2,7 +2,7 @@
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
-namespace Drowhunter.TelemetryLib
+namespace com.drowhunter.TelemetryLib
 {
     public class TcpTelemetryConfig
     {
@@ -109,8 +109,10 @@ namespace Drowhunter.TelemetryLib
 
         public async Task<TcpClient> WaitForConnectAsync(CancellationToken cancellationToken = default)
         {
-            var tcpClient = new TcpClient(Config.IpAddress);
-            await tcpClient.ConnectAsync(Config.IpAddress);
+            cancellationToken.ThrowIfCancellationRequested();
+            var tcpClient = new TcpClient();
+            await tcpClient.ConnectAsync(Config.IpAddress.Address, Config.IpAddress.Port);
+            cancellationToken.ThrowIfCancellationRequested();
 
             return tcpClient;
         }
@@ -128,7 +130,7 @@ namespace Drowhunter.TelemetryLib
 
                 Log($"TCP Listener started on {tcpListener.LocalEndpoint}");
 
-                client = await tcpListener.AcceptTcpClientAsync(cancellationToken);
+                client = await tcpListener.AcceptTcpClientAsync().WithCancellation(cancellationToken);
 
                 Log($"TCP Client connected from {client.Client.RemoteEndPoint}");
 
@@ -269,7 +271,18 @@ namespace Drowhunter.TelemetryLib
                 }                
             }
 
-            tcpClients.Clear();
+            while (tcpClients.TryTake(out var removed))
+            {
+                try
+                {
+                    removed?.Close();
+                }
+                catch (Exception ex)
+                {
+                    Log($"Error disposing TcpClient: {ex.Message}");
+                }
+            }
+
             cts?.Cancel();
             cts?.Dispose();
         }
@@ -285,9 +298,10 @@ namespace Drowhunter.TelemetryLib
             }
             foreach (var tcpClient in tcpClients.Where(c => c?.Connected ?? false))
             {
-                var segment = new ArraySegment<byte>(Converter.ToBytes(data));
-                retval += await tcpClient.Client.SendAsync(segment, SocketFlags.None).WithCancellation(cancellationToken);
-                
+                var bytes = Converter.ToBytes(data);
+                var stream = tcpClient.GetStream();
+                await stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken);
+                retval += bytes.Length;
             }
             
 
@@ -299,7 +313,7 @@ namespace Drowhunter.TelemetryLib
         {
             int size = GetBufferSizeOrDefault<TData>(1024);
 
-            ArraySegment<byte> segment = new ArraySegment<byte>(new byte[size]);
+            var buffer = new byte[size];
             TData retval = default;
 
             var connectedTCPClients = tcpClients.Where(c => c?.Connected ?? false).ToList();
@@ -313,12 +327,13 @@ namespace Drowhunter.TelemetryLib
             {
                 try
                 {
-                    var result = await tcpClient.Client.ReceiveAsync(segment, SocketFlags.None,cancellationToken);
+                    var stream = tcpClient.GetStream();
+                    var result = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
                     if (result > 0)
                     {
-                        Span<byte> trimmed = segment.Array[0..result];
-                        retval = Converter.FromBytes(trimmed.ToArray());
-
+                        var trimmed = new byte[result];
+                        Array.Copy(buffer, trimmed, result);
+                        retval = Converter.FromBytes(trimmed);
 
                         if (retval != null)
                             OnReceiveAsync?.Invoke(tcpClient, retval);
@@ -328,12 +343,10 @@ namespace Drowhunter.TelemetryLib
                 catch (OperationCanceledException)
                 {
                     Log("ReceiveAsync operation was canceled.");
-                    //throw;
                 }
                 catch (Exception ex)
                 {
                     Log($"An error occurred during ReceiveAsync: {ex.Message}");
-                    //throw;
                 }
             }
 

@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace Drowhunter.TelemetryLib
+namespace com.drowhunter.TelemetryLib
 {
     //public struct StringData
     //{

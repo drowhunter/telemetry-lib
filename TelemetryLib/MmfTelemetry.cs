@@ -1,7 +1,7 @@
 ﻿using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 
-namespace Drowhunter.TelemetryLib
+namespace com.drowhunter.TelemetryLib
 {
     public class MmfTelemetryConfig
     {

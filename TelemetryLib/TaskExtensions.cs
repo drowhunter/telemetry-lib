@@ -1,4 +1,4 @@
-﻿namespace Drowhunter.TelemetryLib
+﻿namespace com.drowhunter.TelemetryLib
 {
     internal static class TaskExtensions
     {

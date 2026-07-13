@@ -1,6 +1,6 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace Drowhunter.TelemetryLib
+namespace com.drowhunter.TelemetryLib
 {
 
     
@@ -36,12 +36,12 @@ namespace Drowhunter.TelemetryLib
 
         private class SafeBuffer : SafeHandle
         {
-            public SafeBuffer(int size) : base(nint.Zero, true)
+            public SafeBuffer(int size) : base(IntPtr.Zero, true)
             {
                 SetHandle(Marshal.AllocHGlobal(size));
             }
 
-            public override bool IsInvalid => handle == nint.Zero;
+            public override bool IsInvalid => handle == IntPtr.Zero;
 
             protected override bool ReleaseHandle()
             {

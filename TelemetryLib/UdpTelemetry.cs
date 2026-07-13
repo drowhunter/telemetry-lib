@@ -1,9 +1,11 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace Drowhunter.TelemetryLib
+namespace com.drowhunter.TelemetryLib
 {
-    public record UdpTelemetryConfig
+    public class UdpTelemetryConfig
     {
         public IPEndPoint SendAddress { get; set; }
 
@@ -13,14 +15,14 @@ namespace Drowhunter.TelemetryLib
 
         public UdpTelemetryConfig()
         {
-             
+
         }
 
         /// <summary>
         /// Configure the UDP plugin with send and receive addresses and ports.
         /// </summary>
         /// <param name="sendAddress">ipaddress:port</param>
-        /// <param name="receiveAddress">ipaddress:port</param>      
+        /// <param name="receiveAddress">ipaddress:port</param>
         public UdpTelemetryConfig(string sendAddress = null, string receiveAddress = null)
         {
             SendAddress = ParseAddressAndPort(sendAddress);
@@ -31,7 +33,7 @@ namespace Drowhunter.TelemetryLib
         /// Configure the UDP plugin with send and receive addresses and ports.
         /// </summary>
         /// <param name="sendAddress">send address</param>
-        /// <param name="receiveAddress">receive address</param>      
+        /// <param name="receiveAddress">receive address</param>
         public UdpTelemetryConfig(IPEndPoint sendAddress = null, IPEndPoint receiveAddress = null)
         {
             SendAddress = sendAddress;
@@ -40,12 +42,13 @@ namespace Drowhunter.TelemetryLib
 
         private IPEndPoint ParseAddressAndPort(string address)
         {
-            if (string.IsNullOrWhiteSpace(address))
+            if (string.IsNullOrEmpty(address) || address.Trim().Length == 0)
                 return null;
 
             var parts = address.Split(':');
             if (parts.Length != 2)
                 throw new ArgumentException("Invalid address format. Expected format: ipaddress:port");
+
             var ip = IPAddress.Parse(parts[0]);
             var port = int.Parse(parts[1]);
             return new IPEndPoint(ip, port);
@@ -59,14 +62,11 @@ namespace Drowhunter.TelemetryLib
         public override bool IsConnected =>
             udpClient != null &&
             udpClient.Client != null &&
-            udpClient.Client.Connected &&
-            udpClient.Client.IsBound &&
-            !(udpClient.Client.SafeHandle?.IsInvalid ?? true) &&
-            !(udpClient.Client.SafeHandle?.IsClosed ?? true);
+            udpClient.Client.IsBound;
 
         private static UdpClient udpClient;
 
-        public event Action<UdpReceiveResult, TData> OnReceiveAsync;
+        public event Action<IPEndPoint, TData> OnReceiveAsync;
 
         public UdpTelemetry(UdpTelemetryConfig config, IByteConverter<TData> converter) : base(config, converter)
         {
@@ -77,18 +77,17 @@ namespace Drowhunter.TelemetryLib
             if (config.ReceiveAddress != null)
             {
                 Log($"Create UdpClient: Receiving @ {config.ReceiveAddress.Address}: {config.ReceiveAddress.Port} with timeout of {Config.ReceiveTimeout} ms");
-                udpClient = new UdpClient(config.ReceiveAddress);                
+                udpClient = new UdpClient(config.ReceiveAddress);
             }
             else
             {
-                Log($"Create UdpClient");
+                Log("Create UdpClient");
                 udpClient = new UdpClient();
             }
 
             if (config.SendAddress != null)
             {
                 Log($"Create Send Adress {config.SendAddress.Address}: {config.SendAddress.Port} with timeout of {Config.ReceiveTimeout} ms");
-                //udpClient.Connect(config.SendAddress);
             }
 
             udpClient.Client.ReceiveTimeout = Config.ReceiveTimeout;
@@ -101,7 +100,7 @@ namespace Drowhunter.TelemetryLib
 
             var data = Converter.FromBytes(bytes);
 
-            OnReceiveAsync?.Invoke(new UdpReceiveResult(bytes, remoteEp), data);
+            OnReceiveAsync?.Invoke(remoteEp, data);
 
             return data;
 
@@ -110,10 +109,9 @@ namespace Drowhunter.TelemetryLib
         public override int Send(TData data)
         {
             var bytes = Converter.ToBytes(data);
-            //return udpClient.Send(bytes, bytes.Length);
             if (Config.SendAddress != null)
             {
-                return udpClient.Send(bytes, Config.SendAddress);
+                return udpClient.Send(bytes, bytes.Length, Config.SendAddress);
             }
 
             return 0;
@@ -124,33 +122,14 @@ namespace Drowhunter.TelemetryLib
             udpClient.Close();
         }
 
-
-        public override async Task<TData> ReceiveAsync(CancellationToken cancellationToken = default)
+        public override Task<TData> ReceiveAsync(CancellationToken cancellationToken = default)
         {
-            try
+            return Task.Run(() =>
             {
-                var result = await udpClient.ReceiveAsync(cancellationToken);
-
-                var data = Converter.FromBytes(result.Buffer);
-                OnReceiveAsync?.Invoke(result, data);
-                return data;
-            }
-            catch (OperationCanceledException)
-            {
-                Log("ReceiveAsync operation was canceled.");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Log($"An error occurred during ReceiveAsync: {ex.Message}");
-                //throw;
-            }
-            finally
-            {
-               // udpClient?.Close();
-            }
-            return default(TData);
-        }        
+                cancellationToken.ThrowIfCancellationRequested();
+                return Receive();
+            }, cancellationToken);
+        }
 
     }
 }
